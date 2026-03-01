@@ -1,0 +1,221 @@
+#include <math.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <stdbool.h>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+/* --- Config --- */
+
+static const size_t sample_rate_hz = 16000;
+
+static inline size_t
+ms_to_samples(float ms)
+{
+	return ms / 1000 * sample_rate_hz;
+}
+
+/* --- Shared --- */
+
+typedef struct module Module;
+typedef int(*pull_fn)(Module* m, float* smpl, unsigned n);
+
+typedef enum
+{
+	MODULE_OSCILLATOR,
+	MODULE_MIXER,
+
+	MODULE_COUNT
+} ModuleKind;
+
+static pull_fn pull_cb_table[MODULE_COUNT];
+#define MODULE_PULL(mod, smpl, n) pull_cb_table[(mod)->kind]((mod),(smpl),(n))
+
+/* --- Oscillator --- */
+
+typedef enum
+{
+	SHAPE_SINE,
+	SHAPE_RECT,
+	SHAPE_SAW,
+} OscillatorShape;
+
+typedef struct
+{
+	float freq;
+	float phase;
+	float duty;
+	OscillatorShape shape;
+} OscillatorModule;
+
+Module *oscillator(OscillatorShape shape, float freq);
+void oscillator_set_freq(Module *mod, float freq);
+void oscillator_set_duty(Module *mod, float duty);
+int oscillator_cb(Module* mod, float* smpl, unsigned n);
+
+/* --- Mixer --- */
+
+typedef struct
+{
+	Module* in;
+	float gain;
+	bool set;
+} MixerInput;
+
+typedef struct 
+{
+	MixerInput* inputs;
+	size_t input_count;
+} MixerModule;
+
+Module *mixer(size_t ninputs);
+void mixer_add(Module* mod, unsigned id, Module *in, float gain);
+void mixer_set(Module *mod, unsigned id, float gain);
+int mixer_cb(Module* mod, float* smpl, unsigned n);
+
+/* --- Shared --- */
+
+struct module
+{
+	ModuleKind kind;
+	union
+	{
+		OscillatorModule oscillator;
+		MixerModule mixer;
+	} as;
+};
+
+void register_modules(void)
+{
+	pull_cb_table[MODULE_OSCILLATOR] = oscillator_cb;
+	pull_cb_table[MODULE_MIXER] = mixer_cb;
+}
+
+
+/* --- Testing --- */
+
+int
+main(void)
+{
+	register_modules();
+
+	Module *sine = oscillator(SHAPE_SINE, 1000);
+	Module *rect = oscillator(SHAPE_RECT, 100);
+	Module *saw = oscillator(SHAPE_SAW, 200);
+	Module *sum = mixer(3);
+
+	mixer_add(sum, 0, sine, 0.1);
+	mixer_add(sum, 1, rect, 0.4);
+	mixer_add(sum, 2, saw, 0.4);
+
+	const int want = ms_to_samples(1000);
+	float *buffer = calloc(want, sizeof *buffer);
+
+	int got = 0;
+
+	while (got < want)
+	{
+		int got_now = MODULE_PULL(sum, buffer + got, want - got);
+		if (got_now < 0) return 69;
+		got += got_now;
+	}
+
+	FILE* ofile = fopen("out.raw", "wb");
+	fwrite(buffer, sizeof *buffer, got, ofile);
+	fclose(ofile);
+	return 0;
+}
+
+/* --- Implementation --- */
+
+Module *oscillator(OscillatorShape shape, float freq)
+{
+	Module *mod = malloc(sizeof *mod);
+	if (!mod) return NULL;
+
+	mod->kind = MODULE_OSCILLATOR;
+	mod->as.oscillator.shape = shape;
+	mod->as.oscillator.freq = freq;
+	mod->as.oscillator.duty = 0.5f;
+	mod->as.oscillator.phase = 0.0f;
+
+	return mod;
+}
+
+int oscillator_cb(Module* mod, float* smpl, unsigned n)
+{
+	OscillatorModule *om = &mod->as.oscillator;
+
+	const float a = 2/(1-om->duty);
+
+	for (size_t i = 0; i < n; ++i)
+	{
+		bool pgtd = om->phase < om->duty;
+
+		switch (om->shape)
+		{
+		case SHAPE_SINE: smpl[i] = sinf(om->phase * 2.0f * M_PI); break;
+		case SHAPE_RECT: smpl[i] = pgtd ? 1.0 : -1.0; break;
+		case SHAPE_SAW:  smpl[i] = pgtd ? 2*om->phase/om->duty - 1 : -a*om->phase + a - 1; break;
+		}
+
+		om->phase += om->freq / sample_rate_hz;
+		if (om->phase > 1.0f) om->phase -= 1.0f;
+	}
+
+	return n;
+}
+
+Module *mixer(size_t ninputs)
+{
+	Module *mod = malloc(sizeof *mod);
+	if (!mod) return NULL;
+
+	MixerInput *inputs = calloc(ninputs, sizeof *inputs);
+	if (!inputs)
+	{
+		free(mod);
+		return NULL;
+	}
+
+	mod->kind = MODULE_MIXER;
+	mod->as.mixer.inputs = inputs;
+	mod->as.mixer.input_count = ninputs;
+
+	return mod;
+}
+
+void mixer_add(Module* mod, unsigned id, Module *in, float gain)
+{
+	MixerModule *mm = &mod->as.mixer;
+
+	mm->inputs[id].in = in;
+	mm->inputs[id].gain = gain;
+	mm->inputs[id].set = true;
+}
+
+int mixer_cb(Module* mod, float* smpl, unsigned n)
+{
+	MixerModule *mm = &mod->as.mixer;
+	float *temp = calloc(n, sizeof *temp);
+
+	for (unsigned i = 0; i < mm->input_count; ++i)
+	{
+		if (!mm->inputs[i].set) continue;
+		MODULE_PULL(mm->inputs[i].in, temp, n);
+
+		for (size_t m = 0; m < n; ++m)
+		{
+			smpl[m] += temp[m] * mm->inputs[i].gain;
+		}
+	}
+	
+	for (size_t m = 0; m < n; ++m) {
+		if (smpl[m] > 1.0) smpl[m] = 1.0;
+		else if (smpl[m] < -1.0) smpl[m] = -1.0; 
+	}
+
+	return n;
+}
