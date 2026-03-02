@@ -153,7 +153,7 @@ main(void)
 
 	Module *sine = oscillator(SHAPE_SINE, 1000);
 	Module *rect = oscillator(SHAPE_RECT, 100);
-	Module *saw = oscillator(SHAPE_SAW, 200);
+	Module *saw = oscillator(SHAPE_SAW, 150);
 	Module *sum = mixer(2);
 
 	// mixer_add(sum, 0, sine, 0.1);
