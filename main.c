@@ -26,6 +26,7 @@ typedef enum
 {
 	MODULE_OSCILLATOR,
 	MODULE_MIXER,
+	MODULE_BIQUAD,
 
 	MODULE_COUNT
 } ModuleKind;
@@ -75,6 +76,31 @@ void mixer_add(Module* mod, unsigned id, Module *in, float gain);
 void mixer_set(Module *mod, unsigned id, float gain);
 int mixer_cb(Module* mod, float* smpl, unsigned n);
 
+/* --- Biquad --- */
+
+typedef enum
+{
+	BQ_LOWPASS,
+	BQ_HIGHPASS,
+	BQ_BANDPASS,
+	BQ_NOTCH,
+	BQ_PEAK,
+	BQ_LOWSHELF,
+	BQ_HIGHSHELF,
+} BiquadFilterKind;
+
+typedef struct
+{
+	float a[3];
+	float b[3];
+	float x[2];
+	float y[2];
+	Module* in;
+} BiquadModule;
+
+Module *biquad(BiquadFilterKind kind, float freq, float Q, float gain_db, Module *in);
+int biquad_cb(Module *mod, float *smpl, unsigned n);
+
 /* --- Shared --- */
 
 struct module
@@ -84,6 +110,7 @@ struct module
 	{
 		OscillatorModule oscillator;
 		MixerModule mixer;
+		BiquadModule biquad;
 	} as;
 };
 
@@ -91,6 +118,7 @@ void register_modules(void)
 {
 	pull_cb_table[MODULE_OSCILLATOR] = oscillator_cb;
 	pull_cb_table[MODULE_MIXER] = mixer_cb;
+	pull_cb_table[MODULE_BIQUAD] = biquad_cb;
 }
 
 
@@ -99,6 +127,7 @@ void register_modules(void)
 int
 main(void)
 {
+	/* --- Setup --- */
 	register_modules();
 
 	Module *sine = oscillator(SHAPE_SINE, 1000);
@@ -110,6 +139,12 @@ main(void)
 	mixer_add(sum, 1, rect, 0.4);
 	mixer_add(sum, 2, saw, 0.4);
 
+	Module *dump = biquad(BQ_LOWPASS, 200, 0.7071f, 6, sum);
+
+	Module *out = sum;
+
+	/* --- Output --- */
+
 	const int want = ms_to_samples(1000);
 	float *buffer = calloc(want, sizeof *buffer);
 
@@ -117,7 +152,7 @@ main(void)
 
 	while (got < want)
 	{
-		int got_now = MODULE_PULL(sum, buffer + got, want - got);
+		int got_now = MODULE_PULL(out, buffer + got, want - got);
 		if (got_now < 0) return 69;
 		got += got_now;
 	}
@@ -199,7 +234,7 @@ void mixer_add(Module* mod, unsigned id, Module *in, float gain)
 int mixer_cb(Module* mod, float* smpl, unsigned n)
 {
 	MixerModule *mm = &mod->as.mixer;
-	float *temp = calloc(n, sizeof *temp);
+	float *temp = calloc(n, sizeof *temp); // TODO: remove allocation at runtime;
 
 	for (unsigned i = 0; i < mm->input_count; ++i)
 	{
@@ -218,4 +253,138 @@ int mixer_cb(Module* mod, float* smpl, unsigned n)
 	}
 
 	return n;
+}
+
+static void
+biquad_load_coefficients(BiquadModule* bm, BiquadFilterKind kind,
+						float A, float sn, float cs,
+						float alpha, float beta) {
+	switch (kind)
+	{
+		case BQ_LOWPASS:
+			bm->b[0] = (1.0 - cs) /2.0;
+    		bm->b[1] = 1.0 - cs;
+    		bm->b[2] = (1.0 - cs) /2.0;
+    		bm->a[0] = 1.0 + alpha;
+    		bm->a[1] = -2.0 * cs;
+    		bm->a[2] = 1.0 - alpha;
+			break;
+
+		case BQ_HIGHPASS:
+			bm->b[0] = (1 + cs) /2.0;
+    		bm->b[1] = -(1 + cs);
+    		bm->b[2] = (1 + cs) /2.0;
+    		bm->a[0] = 1 + alpha;
+    		bm->a[1] = -2 * cs;
+    		bm->a[2] = 1 - alpha;
+			break;
+
+		case BQ_BANDPASS:
+			bm->b[0] = alpha;
+    		bm->b[1] = 0;
+    		bm->b[2] = -alpha;
+    		bm->a[0] = 1 + alpha;
+    		bm->a[1] = -2 * cs;
+    		bm->a[2] = 1 - alpha;
+			break;
+		
+		case BQ_NOTCH:
+			bm->b[0] = 1;
+    		bm->b[1] = -2 * cs;
+    		bm->b[2] = 1;
+    		bm->a[0] = 1 + alpha;
+    		bm->a[1] = -2 * cs;
+    		bm->a[2] = 1 - alpha;
+			break;
+		
+		case BQ_PEAK:
+			bm->b[0] = 1 + (alpha * A);
+    		bm->b[1] = -2 * cs;
+    		bm->b[2] = 1 - (alpha * A);
+    		bm->a[0] = 1 + (alpha /A);
+    		bm->a[1] = -2 * cs;
+    		bm->a[2] = 1 - (alpha /A);
+			break;
+		
+		case BQ_LOWSHELF:
+			bm->b[0] = A * ((A + 1) - (A - 1) * cs + beta * sn);
+    		bm->b[1] = 2 * A * ((A - 1) - (A + 1) * cs);
+    		bm->b[2] = A * ((A + 1) - (A - 1) * cs - beta * sn);
+    		bm->a[0] = (A + 1) + (A - 1) * cs + beta * sn;
+    		bm->a[1] = -2 * ((A - 1) + (A + 1) * cs);
+    		bm->a[2] = (A + 1) + (A - 1) * cs - beta * sn;
+			break;
+		
+		case BQ_HIGHSHELF:
+			bm->b[0] = A * ((A + 1) + (A - 1) * cs + beta * sn);
+    		bm->b[1] = -2 * A * ((A - 1) + (A + 1) * cs);
+    		bm->b[2] = A * ((A + 1) + (A - 1) * cs - beta * sn);
+    		bm->a[0] = (A + 1) - (A - 1) * cs + beta * sn;
+    		bm->a[1] = 2 * ((A - 1) - (A + 1) * cs);
+    		bm->a[2] = (A + 1) - (A - 1) * cs - beta * sn;
+			break;
+
+		default:
+			break;
+	}
+}
+
+Module *biquad(BiquadFilterKind kind, float freq, float Q, float gain_db, Module *in)
+{
+	Module *mod = malloc(sizeof *mod);
+	if (!mod) return NULL;
+
+	mod->kind = MODULE_BIQUAD;
+	mod->as.biquad.in = in;
+
+    BiquadModule* bm = &mod->as.biquad;
+
+	float A = pow(10, gain_db / 40);
+    float omega = 2 * M_PI * freq / sample_rate_hz;
+    float sn = sin(omega);
+    float cs = cos(omega);
+    float alpha = sn / (2*Q);
+    float beta = sqrt(A + A);
+
+	biquad_load_coefficients(bm, kind, A, sn, cs, alpha, beta);
+
+	bm->a[1] /= (bm->a[0]);
+	bm->a[2] /= (bm->a[0]);
+	bm->b[0] /= (bm->a[0]);
+	bm->b[1] /= (bm->a[0]);
+	bm->b[2] /= (bm->a[0]);
+
+	bm->x[0] = 0.f;
+	bm->x[1] = 0.f;
+	bm->y[0] = 0.f;
+	bm->y[1] = 0.f;
+
+	return mod;
+}
+
+int biquad_cb(Module *mod, float *smpl, unsigned n)
+{
+    BiquadModule *bm = &mod->as.biquad;
+
+    int got = MODULE_PULL(bm->in, smpl, n);
+    if (got <= 0) return got;   
+
+    for (int i = 0; i < got; ++i)
+    {
+        float input = smpl[i];
+        float output =  (bm->b[0] * input) +
+                        (bm->b[1] * bm->x[0]) +
+                        (bm->b[2] * bm->x[1])
+                        - (bm->a[1] * bm->y[0])
+                        - (bm->a[2] * bm->y[1]);
+
+        bm->x[1] = bm->x[0];
+        bm->x[0] = input;
+        bm->y[1] = bm->y[0];
+        bm->y[0] = output;
+
+        smpl[i] = output;
+    }
+
+    return got;
 }
