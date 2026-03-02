@@ -7,6 +7,11 @@
 #define M_PI 3.14159265358979323846
 #endif
 
+#define UNREACHABLE(where) do { \
+	fprintf(stderr, "Entered unreachable state ("where")\n"); \
+	abort(); \
+} while(0)
+
 /* --- Config --- */
 
 static const size_t sample_rate_hz = 16000;
@@ -50,11 +55,13 @@ typedef struct
 	float phase;
 	float duty;
 	OscillatorShape shape;
+	Module* in;
 } OscillatorModule;
 
 Module *oscillator(OscillatorShape shape, float freq);
 void oscillator_set_freq(Module *mod, float freq);
 void oscillator_set_duty(Module *mod, float duty);
+void oscillator_connect(Module *mod, Module* in);
 int oscillator_cb(Module* mod, float* smpl, unsigned n);
 
 /* --- Mixer --- */
@@ -147,16 +154,18 @@ main(void)
 	Module *sine = oscillator(SHAPE_SINE, 1000);
 	Module *rect = oscillator(SHAPE_RECT, 100);
 	Module *saw = oscillator(SHAPE_SAW, 200);
-	Module *sum = mixer(3);
+	Module *sum = mixer(2);
 
-	mixer_add(sum, 0, sine, 0.1);
-	mixer_add(sum, 1, rect, 0.4);
-	mixer_add(sum, 2, saw, 0.4);
+	// mixer_add(sum, 0, sine, 0.1);
+	mixer_add(sum, 0, rect, 0.4);
+	mixer_add(sum, 1, saw, 0.4);
 
-	Module *dump = biquad(BQ_LOWPASS, 200, 0.7071f, 6, sum);
-	Module *amp = amplifier(1.43f, dump);
+	Module *amp = amplifier(0.1, sine);
+	oscillator_connect(rect, amp);
 
-	Module *out = amp;
+	// Module *dump = biquad(BQ_LOWPASS, 200, 0.7071f, 6, sum);
+
+	Module *out = sum;
 
 	/* --- Output --- */
 
@@ -190,32 +199,54 @@ Module *oscillator(OscillatorShape shape, float freq)
 	mod->as.oscillator.freq = freq;
 	mod->as.oscillator.duty = 0.5f;
 	mod->as.oscillator.phase = 0.0f;
+	mod->as.oscillator.in = NULL;
 
 	return mod;
+}
+
+static float generate_sample(OscillatorModule *om)
+{
+	const bool pgtd = om->phase < om->duty;
+	const float a = 2/(1-om->duty); // TODO: move into struct;
+
+	switch (om->shape)
+	{
+	case SHAPE_SINE: return sinf(om->phase * 2.0f * M_PI); 
+	case SHAPE_RECT: return pgtd ? 1.0 : -1.0; 
+	case SHAPE_SAW:  return pgtd ? 2*om->phase/om->duty - 1 : -a*om->phase + a - 1;
+	default: UNREACHABLE("om->shape");
+	}
+}
+
+static void increment_phase(OscillatorModule *om)
+{
+	om->phase += om->freq / sample_rate_hz;
+		if (om->phase > 1.0f) om->phase -= 1.0f;
 }
 
 int oscillator_cb(Module* mod, float* smpl, unsigned n)
 {
 	OscillatorModule *om = &mod->as.oscillator;
 
-	const float a = 2/(1-om->duty);
+	if (om->in)
+	{
+		n = MODULE_PULL(om->in, smpl, n);
+	}
 
 	for (size_t i = 0; i < n; ++i)
 	{
-		bool pgtd = om->phase < om->duty;
+		if (!om->in) smpl[i] = 0;
+		smpl[i] += generate_sample(om);
 
-		switch (om->shape)
-		{
-		case SHAPE_SINE: smpl[i] = sinf(om->phase * 2.0f * M_PI); break;
-		case SHAPE_RECT: smpl[i] = pgtd ? 1.0 : -1.0; break;
-		case SHAPE_SAW:  smpl[i] = pgtd ? 2*om->phase/om->duty - 1 : -a*om->phase + a - 1; break;
-		}
-
-		om->phase += om->freq / sample_rate_hz;
-		if (om->phase > 1.0f) om->phase -= 1.0f;
+		increment_phase(om);
 	}
 
 	return n;
+}
+
+void oscillator_connect(Module *mod, Module* in)
+{
+	mod->as.oscillator.in = in;
 }
 
 Module *mixer(size_t ninputs)
