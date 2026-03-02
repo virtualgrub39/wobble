@@ -27,6 +27,7 @@ typedef enum
 	MODULE_OSCILLATOR,
 	MODULE_MIXER,
 	MODULE_BIQUAD,
+	MODULE_AMPLIFIER,
 
 	MODULE_COUNT
 } ModuleKind;
@@ -101,6 +102,17 @@ typedef struct
 Module *biquad(BiquadFilterKind kind, float freq, float Q, float gain_db, Module *in);
 int biquad_cb(Module *mod, float *smpl, unsigned n);
 
+/* --- Amplifier --- */
+
+typedef struct
+{
+	float gain;
+	Module *in;
+} AmplifierModule;
+
+Module *amplifier(float gain, Module *in);
+int amplifier_cb(Module *mod, float *smpl, unsigned n);
+
 /* --- Shared --- */
 
 struct module
@@ -111,6 +123,7 @@ struct module
 		OscillatorModule oscillator;
 		MixerModule mixer;
 		BiquadModule biquad;
+		AmplifierModule amplifier;
 	} as;
 };
 
@@ -119,6 +132,7 @@ void register_modules(void)
 	pull_cb_table[MODULE_OSCILLATOR] = oscillator_cb;
 	pull_cb_table[MODULE_MIXER] = mixer_cb;
 	pull_cb_table[MODULE_BIQUAD] = biquad_cb;
+	pull_cb_table[MODULE_AMPLIFIER] = amplifier_cb;
 }
 
 
@@ -140,8 +154,9 @@ main(void)
 	mixer_add(sum, 2, saw, 0.4);
 
 	Module *dump = biquad(BQ_LOWPASS, 200, 0.7071f, 6, sum);
+	Module *amp = amplifier(1.43f, dump);
 
-	Module *out = sum;
+	Module *out = amp;
 
 	/* --- Output --- */
 
@@ -388,3 +403,33 @@ int biquad_cb(Module *mod, float *smpl, unsigned n)
 
     return got;
 }
+
+Module *amplifier(float gain, Module *in)
+{
+	Module *mod = malloc(sizeof *mod);
+	if (!mod) return NULL;
+
+	mod->kind = MODULE_AMPLIFIER;
+	AmplifierModule *am = &mod->as.amplifier;
+
+	am->gain = gain;
+	am->in = in;
+
+	return mod;
+}
+
+int amplifier_cb(Module *mod, float *smpl, unsigned n)
+{
+	AmplifierModule *am = &mod->as.amplifier;
+
+	int got = MODULE_PULL(am->in, smpl, n);
+
+	if (got > 0)
+	{
+		for (size_t i = 0; i < n; ++i)
+			smpl[i] *= am->gain;
+	}
+
+	return got;
+}
+
