@@ -3,6 +3,7 @@ SRC = main.c
 
 CFLAGS += -Wall -Wextra
 CFLAGS += -std=c99
+CFLAGS += -ggdb
 
 LDFLAGS += -lm
 
