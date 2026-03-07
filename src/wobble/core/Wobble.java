@@ -29,7 +29,7 @@ public enum Wobble {
         return currentChunk.get();
     }
 
-    public void incrementCurrentChunk() {
+    public void tick() {
         currentChunk.incrementAndGet();
     }
 

@@ -18,12 +18,12 @@ public abstract class Module {
         return false;
     }
 
-    Port output(Integer id) {
+    public Port output(Integer id) {
         if (id == null) id = 0;
         return new Port(this, id);
     }
 
-    Port output() {
+    public Port output() {
         return output(null);
     }
 }
