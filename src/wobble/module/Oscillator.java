@@ -56,7 +56,7 @@ public class Oscillator extends Module {
     }
 
     public void setDuty(float duty) {
-        this.duty = duty;
+        this.duty = Math.clamp(duty, 0.0f, 1.0f);
     }
 
     private static float hash(float seed) {

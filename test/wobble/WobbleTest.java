@@ -26,7 +26,7 @@ public class WobbleTest {
         while (got < want) {
             wobble.tick();
 
-            FloatBuffer block = port.read(0);
+            FloatBuffer block = port.read();
             block.rewind();
 
             while (block.hasRemaining())
@@ -55,5 +55,18 @@ public class WobbleTest {
         hf.modulate(mod.output(), 4);
 
         moduleWrite(1000, hf.output(), "oscillator.raw");
+    }
+
+    @Test
+    public void testAmplifier() throws IOException {
+        Oscillator osc = new Oscillator(Oscillator.Shape.SINE, 440);
+        Oscillator mod = new Oscillator(Oscillator.Shape.TRIANGLE, 2);
+        Amplifier amp = new Amplifier(osc.output());
+
+        osc.modulate(mod.output(), 2);
+        amp.setStaticGain(0.7f);
+        amp.control(mod.output());
+
+        moduleWrite(1000, amp.output(), "amplifier.raw");
     }
 }

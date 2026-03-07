@@ -11,13 +11,8 @@ public class Port {
         this.id = id;
     }
 
-    public FloatBuffer read(Integer id) {
-        if (id == null) id = 0;
+    public FloatBuffer read() {
         module.pull();
         return module.read(id);
-    }
-
-    public FloatBuffer read() {
-        return read(null);
     }
 }
