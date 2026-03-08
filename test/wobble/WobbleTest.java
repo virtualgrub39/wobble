@@ -104,4 +104,49 @@ public class WobbleTest {
 
         moduleWrite(1000, svf.output(), "svf.lowpass.raw");
     }
+
+    @Test
+    public void testEnvelope() throws IOException {
+        Oscillator base = new Oscillator(Oscillator.Shape.SINE, 440);
+        Oscillator gate = new Oscillator(Oscillator.Shape.SQUARE, 4);
+        Envelope env = new Envelope(0.05f, 0.1f, 0.7f, 0.1f, gate.output());
+        Amplifier vca = new Amplifier(base.output());
+
+        vca.control(env.output());
+
+        moduleWrite(1000, vca.output(), "envelope.raw");
+    }
+
+    @Test
+    public void testInstrument() throws IOException {
+        Oscillator gate = new Oscillator(Oscillator.Shape.SQUARE, 1);
+
+        Oscillator.Shape shape = Oscillator.Shape.TRIANGLE;
+        float baseFreq = 220;
+        float duty = 0.0f;
+
+        float cutoff = 300;
+        float Q = 0.707f;
+        
+        float attack = 0.01f;
+        float decay = 0.05f;
+        float release = 0.1f;
+        float sustain = 0.7f;
+
+        Oscillator base = new Oscillator(shape, baseFreq);
+        base.setDuty(duty);
+
+        StateVariableFilter filter = new StateVariableFilter(base.output());
+        filter.lowPass(cutoff, Q);
+
+        Envelope env = new Envelope(attack, decay, sustain, release, gate.output());
+        
+        Amplifier vca = new Amplifier(filter.output());
+        vca.control(env.output());
+        
+        Oscillator wobbler = new Oscillator(Oscillator.Shape.SINE, 1);
+        base.modulate(wobbler.output(), 0.1f);
+
+        moduleWrite(4000, vca.output(), "instrument.raw");
+    }
 }
