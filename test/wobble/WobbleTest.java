@@ -74,11 +74,19 @@ public class WobbleTest {
     public void testMixer() throws IOException {
         Oscillator base = new Oscillator(Oscillator.Shape.SINE, 440);
         Oscillator noise = new Oscillator(Oscillator.Shape.NOISE, 1000);
+        Oscillator mod = new Oscillator(Oscillator.Shape.TRIANGLE, 2);
+
         Mixer mixer = new Mixer();
 
         mixer.add(base.output(), 0.7f);
         mixer.add(noise.output(), 0.3f);
 
-        moduleWrite(1000, mixer.output(), "mixer.raw");
+        moduleWrite(1000, mixer.output(), "mixer.noise.raw");
+
+        mixer.remove(noise.output());
+        mixer.setGain(base.output(), 0.5f);
+        mixer.add(mod.output(), 0.5f);
+
+        moduleWrite(1000, mixer.output(), "mixer.mod.raw");
     }
 }

@@ -3,13 +3,14 @@ package wobble.module;
 import java.nio.FloatBuffer;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Objects;
 
 import wobble.core.Port;
 import wobble.core.Wobble;
 import wobble.core.Module;
 
 public class Mixer extends Module {
-    private class Input implements Comparable<Input> {
+    private class Input {
         public Port port;
         public float gain;
 
@@ -19,8 +20,18 @@ public class Mixer extends Module {
         }
 
         @Override
-        public int compareTo(Input o) {
-            return this.port == o.port ? 0 : 1;
+        public boolean equals(Object o) {
+            if (this == o)
+                return true;
+            if (!(o instanceof Input))
+                return false;
+            Input other = (Input) o;
+            return Objects.equals(this.port, other.port);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hashCode(port);
         }
     }
 
@@ -35,7 +46,7 @@ public class Mixer extends Module {
 
     public void setGain(Port port, float gain) {
         for (Input input : inputs) {
-            if (input.port == port) {
+            if (Objects.equals(input.port, port)) {
                 input.gain = gain;
                 return;
             }
@@ -43,14 +54,13 @@ public class Mixer extends Module {
     }
 
     public void remove(Port port) {
-        inputs.remove(new Input(port, 0));
+        inputs.removeIf(input -> Objects.equals(input.port, port));
     }
 
     public Mixer() {
         sampleBuffer = FloatBuffer.allocate(Wobble.INSTANCE.getChunkSize());
         zeros = new float[Wobble.INSTANCE.getChunkSize()];
     }
-
 
     public void compute() {
         sampleBuffer.clear();
