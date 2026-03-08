@@ -69,4 +69,16 @@ public class WobbleTest {
 
         moduleWrite(1000, amp.output(), "amplifier.raw");
     }
+
+    @Test
+    public void testMixer() throws IOException {
+        Oscillator base = new Oscillator(Oscillator.Shape.SINE, 440);
+        Oscillator noise = new Oscillator(Oscillator.Shape.NOISE, 1000);
+        Mixer mixer = new Mixer();
+
+        mixer.add(base.output(), 0.7f);
+        mixer.add(noise.output(), 0.3f);
+
+        moduleWrite(1000, mixer.output(), "mixer.raw");
+    }
 }
