@@ -89,4 +89,19 @@ public class WobbleTest {
 
         moduleWrite(1000, mixer.output(), "mixer.mod.raw");
     }
+
+    @Test
+    public void testSVF() throws IOException {
+        Oscillator osc = new Oscillator(Oscillator.Shape.SINE, 440);
+        Oscillator noise = new Oscillator(Oscillator.Shape.NOISE, 1000);
+
+        Mixer mixer = new Mixer();
+        mixer.add(osc.output(), 0.7f);
+        mixer.add(noise.output(), 0.3f);
+
+        StateVariableFilter svf = new StateVariableFilter(mixer.output());
+        svf.lowPass(1000, 0.707f);
+
+        moduleWrite(1000, svf.output(), "svf.lowpass.raw");
+    }
 }
