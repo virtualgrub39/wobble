@@ -14,7 +14,13 @@ public class StateVariableFilter extends Module
     private float ic1eq, ic2eq;      // internal state
 
     private FloatBuffer sampleBuffer;
+    private Port mod;
     private Port input;
+
+    private float baseFreq = 1000.0f;
+    private float baseQ = 1.0f;
+    private float modDepthOctaves = 0.0f;
+    private float modDepthQ = 0.0f;
 
     public StateVariableFilter(Port input)
     {
@@ -24,6 +30,28 @@ public class StateVariableFilter extends Module
     	m0 = 0f;
     	m1 = 0f;
     	m2 = 0f;
+    }
+
+    public void modulate(Port mod, float depthOctaves, float depthQ)
+    {
+    	this.mod = mod;
+    	this.modDepthOctaves = depthOctaves;
+    	this.modDepthQ = depthQ;
+    }
+
+    public void setBaseFrequency(float freq)
+    {
+    	this.baseFreq = freq;
+    }
+
+    public void setBaseQ(float Q)
+    {
+    	this.baseQ = Q;
+    }
+
+    public void stopModulating()
+    {
+    	this.mod = null;
     }
 
 	private void setCoefficients(float freq, float Q)
@@ -141,12 +169,24 @@ public class StateVariableFilter extends Module
     @Override
     public void compute()
     {
-    	FloatBuffer input_values = input.read();
+    	FloatBuffer inputValues = input.read();
+        FloatBuffer modValues = (mod != null) ? mod.read() : null;
 
-    	for (int i = 0; i < Wobble.INSTANCE.getChunkSize(); ++i)
-    	{
-    		sampleBuffer.put(i, processSample(input_values.get(i)));
-    	}
+        if (modValues == null) {
+            setCoefficients(baseFreq, baseQ);
+            for (int i = 0; i < Wobble.INSTANCE.getChunkSize(); i++) {
+                sampleBuffer.put(i, processSample(inputValues.get(i)));
+            }
+            return;
+        }
+
+        for (int i = 0; i < Wobble.INSTANCE.getChunkSize(); i++) {
+            float modValue = modValues.get(i);
+            float freq = baseFreq * (float)Math.pow(2.0, modValue * modDepthOctaves);
+            float Q = baseQ * (float)Math.pow(2.0, modValue * modDepthQ);
+            setCoefficients(freq, Q);
+            sampleBuffer.put(i, processSample(inputValues.get(i)));
+        }
     }
 
     @Override
