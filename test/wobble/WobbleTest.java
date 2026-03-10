@@ -117,36 +117,90 @@ public class WobbleTest {
         moduleWrite(1000, vca.output(), "envelope.raw");
     }
 
+    private float noteToVolt(float note) {
+        return (float) Math.pow(2, (note - 69) / 12.0f);
+    }
+
     @Test
     public void testInstrument() throws IOException {
-        Oscillator gate = new Oscillator(Oscillator.Shape.SQUARE, 1);
+        final int chunkSize = 1024;
+        Wobble.INSTANCE.setChunkSize(chunkSize);
 
-        Oscillator.Shape shape = Oscillator.Shape.TRIANGLE;
-        float baseFreq = 220;
-        float duty = 0.0f;
+        Controller controller = new Controller();
 
-        float cutoff = 300;
-        float Q = 0.707f;
-        
-        float attack = 0.01f;
-        float decay = 0.05f;
-        float release = 0.1f;
-        float sustain = 0.7f;
+        Oscillator osc1 = new Oscillator(Oscillator.Shape.TRIANGLE, 125);
+        osc1.setDuty(0);
+        osc1.modulate(controller.output(Controller.CV), 4);
 
-        Oscillator base = new Oscillator(shape, baseFreq);
-        base.setDuty(duty);
+        Oscillator osc2 = new Oscillator(Oscillator.Shape.TRIANGLE, 125);
+        osc2.setDuty(0);
+        osc2.setDetuneCents(-24);
+        osc2.modulate(controller.output(Controller.CV), 4);
 
-        StateVariableFilter filter = new StateVariableFilter(base.output());
-        filter.lowPass(cutoff, Q);
+        Mixer vcfIn = new Mixer();
+        vcfIn.add(osc1.output(), 0.5f);
+        vcfIn.add(osc2.output(), 0.5f);
 
-        Envelope env = new Envelope(attack, decay, sustain, release, gate.output());
-        
+        StateVariableFilter filter = new StateVariableFilter(vcfIn.output());
+        filter.lowPass(1000, 0.707f);
+        filter.modulate(controller.output(Controller.CV), 3, 0);
+
+        Envelope env = new Envelope(0.02f, 0.01f, 1.0f, 0.02f, controller.output(Controller.GATE));
+
         Amplifier vca = new Amplifier(filter.output());
         vca.control(env.output());
-        
-        Oscillator wobbler = new Oscillator(Oscillator.Shape.SINE, 1);
-        base.modulate(wobbler.output(), 0.1f);
 
-        moduleWrite(4000, vca.output(), "instrument.raw");
+        List<Float> samples = new ArrayList<>();
+
+        for (int i = 0; i < 5; i++) {
+            float got = 0;
+            float want = Wobble.INSTANCE.timeToSamples(0.5f);
+            
+            controller.gateOn(noteToVolt(60 + i * 2));
+
+            while (got < want) {
+                Wobble.INSTANCE.tick();
+
+                FloatBuffer block = vca.output().read();
+                block.rewind();
+
+                if (block.capacity() > want - got)
+                    block.limit((int)(want - got));
+
+                while (block.hasRemaining())
+                    samples.add(block.get());
+
+                got += block.capacity();
+            }
+
+            controller.gateOff();
+            got = 0;
+            want = Wobble.INSTANCE.timeToSamples(0.1f);
+
+            while (got < want) {
+                Wobble.INSTANCE.tick();
+
+                FloatBuffer block = vca.output().read();
+                block.rewind();
+
+                if (block.capacity() > want - got)
+                    block.limit((int)(want - got));
+
+                while (block.hasRemaining())
+                    samples.add(block.get());
+
+                got += block.capacity();
+            }
+        }
+
+        ByteBuffer byteBuffer = ByteBuffer.allocate(samples.size() * Float.BYTES)
+                .order(ByteOrder.LITTLE_ENDIAN);
+
+        for (int i = 0; i < samples.size(); i++)
+            byteBuffer.putFloat(samples.get(i));
+
+        try (FileOutputStream fos = new FileOutputStream("instrument.raw")) {
+            fos.write(byteBuffer.array());
+        }
     }
 }
