@@ -13,8 +13,10 @@ public class Oscillator extends Module {
 
     private FloatBuffer sampleBuffer;
 
-    private Port cv;
-    private float cvOctaves;
+    private Port mod;
+    private float modOctaves;
+
+    private float detuneCents = 0.0f;
 
     public enum Shape {
         SINE, SQUARE, TRIANGLE, NOISE
@@ -30,7 +32,7 @@ public class Oscillator extends Module {
     }
 
     private void incrementPhase(float cv) {
-        float modFrequency = frequency * (float) Math.pow(2, cv * cvOctaves); // 1V/oct
+        float modFrequency = frequency * (float) Math.pow(2, cv * modOctaves + detuneCents / 12.0f); // 1V/oct + detune
         phase += modFrequency / Wobble.INSTANCE.getSampleRate();
         wrapPhase();
     }
@@ -42,13 +44,13 @@ public class Oscillator extends Module {
         sampleBuffer = FloatBuffer.allocate(Wobble.INSTANCE.getChunkSize());
     }
 
-    public void modulate(Port cv, float octaves) {
-        this.cv = cv;
-        this.cvOctaves = octaves;
+    public void modulate(Port mod, float octaves) {
+        this.mod = mod;
+        this.modOctaves = octaves;
     }
 
     public void stopModulating() {
-        this.cv = null;
+        this.mod = null;
     }
 
     public void setFrequency(float frequency) {
@@ -57,6 +59,14 @@ public class Oscillator extends Module {
 
     public void setDuty(float duty) {
         this.duty = Math.clamp(duty, 0.0f, 1.0f);
+    }
+
+    public void setShape(Shape shape) {
+        this.shape = shape;
+    }
+
+    public void setDetuneCents(float detuneCents) {
+        this.detuneCents = detuneCents;
     }
 
     private static float hash(float seed) {
@@ -105,7 +115,7 @@ public class Oscillator extends Module {
     public void compute()
     {
         FloatBuffer cvValues = null;
-        if (cv != null) cvValues = cv.read();
+        if (mod != null) cvValues = mod.read();
 
         for (int i = 0; i < Wobble.INSTANCE.getChunkSize(); i++) {
             float cvValue = (cvValues != null) ? cvValues.get(i) : 0.0f;
