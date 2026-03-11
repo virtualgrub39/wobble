@@ -169,8 +169,8 @@ public class StateVariableFilter extends Module
     @Override
     public void compute()
     {
-    	FloatBuffer inputValues = input.read();
-        FloatBuffer modValues = (mod != null) ? mod.read() : null;
+    	FloatBuffer inputValues = (FloatBuffer)input.read();
+        FloatBuffer modValues = (mod != null) ? (FloatBuffer)mod.read() : null;
 
         if (modValues == null) {
             setCoefficients(baseFreq, baseQ);

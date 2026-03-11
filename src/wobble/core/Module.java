@@ -1,5 +1,6 @@
 package wobble.core;
 
+import java.nio.Buffer;
 import java.nio.FloatBuffer;
 
 public abstract class Module {
@@ -7,7 +8,7 @@ public abstract class Module {
 
     public abstract void compute();
 
-    public abstract FloatBuffer read(int id);
+    public abstract Buffer read(int id);
 
     public boolean pull() {
         if (Wobble.INSTANCE.getCurrentChunk() > lastComputedChunk) {

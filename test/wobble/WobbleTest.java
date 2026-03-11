@@ -26,7 +26,7 @@ public class WobbleTest {
         while (got < want) {
             wobble.tick();
 
-            FloatBuffer block = port.read();
+            FloatBuffer block = (FloatBuffer)port.read();
             block.rewind();
 
             while (block.hasRemaining())
@@ -123,8 +123,11 @@ public class WobbleTest {
 
     @Test
     public void testInstrument() throws IOException {
-        final int chunkSize = 1024;
+        final int chunkSize = 512;
         Wobble.INSTANCE.setChunkSize(chunkSize);
+        Wobble.INSTANCE.setSampleRate(48000);
+
+        // 2*VCO => 1*VCF => 1*VCA(ENV) => OUT
 
         Controller controller = new Controller();
 
@@ -161,7 +164,7 @@ public class WobbleTest {
             while (got < want) {
                 Wobble.INSTANCE.tick();
 
-                FloatBuffer block = vca.output().read();
+                FloatBuffer block = (FloatBuffer)vca.output().read();
                 block.rewind();
 
                 if (block.capacity() > want - got)
@@ -180,7 +183,7 @@ public class WobbleTest {
             while (got < want) {
                 Wobble.INSTANCE.tick();
 
-                FloatBuffer block = vca.output().read();
+                FloatBuffer block = (FloatBuffer)vca.output().read();
                 block.rewind();
 
                 if (block.capacity() > want - got)

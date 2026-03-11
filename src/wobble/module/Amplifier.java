@@ -32,8 +32,8 @@ public class Amplifier extends Module {
 
     @Override
     public void compute() {
-        FloatBuffer inputValues = input.read();
-        FloatBuffer cvValues = cv != null ? cv.read() : null;
+        FloatBuffer inputValues = (FloatBuffer)input.read();
+        FloatBuffer cvValues = cv != null ? (FloatBuffer)cv.read() : null;
 
         for (int i = 0; i < inputValues.capacity(); i++) {
             float outputValue =inputValues.get(i) * staticGain;

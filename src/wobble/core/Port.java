@@ -1,5 +1,6 @@
 package wobble.core;
 
+import java.nio.Buffer;
 import java.nio.FloatBuffer;
 
 public class Port {
@@ -11,7 +12,7 @@ public class Port {
         this.id = id;
     }
 
-    public FloatBuffer read() {
+    public Buffer read() {
         module.pull();
         return module.read(id);
     }

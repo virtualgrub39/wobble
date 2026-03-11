@@ -115,7 +115,7 @@ public class Oscillator extends Module {
     public void compute()
     {
         FloatBuffer cvValues = null;
-        if (mod != null) cvValues = mod.read();
+        if (mod != null) cvValues = (FloatBuffer)mod.read();
 
         for (int i = 0; i < Wobble.INSTANCE.getChunkSize(); i++) {
             float cvValue = (cvValues != null) ? cvValues.get(i) : 0.0f;

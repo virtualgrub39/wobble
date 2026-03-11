@@ -68,7 +68,7 @@ public class Mixer extends Module {
         sampleBuffer.flip();
 
         for (Input input : inputs) {
-            FloatBuffer inputBuffer = input.port.read();
+            FloatBuffer inputBuffer = (FloatBuffer)input.port.read();
             for (int i = 0; i < sampleBuffer.capacity(); i++) {
                 sampleBuffer.put(i, sampleBuffer.get(i) + inputBuffer.get(i) * input.gain);
             }

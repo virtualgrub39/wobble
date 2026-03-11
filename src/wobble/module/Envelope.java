@@ -90,7 +90,7 @@ public class Envelope extends Module {
 
     @Override
     public void compute() {
-        final FloatBuffer gateValues = gate.read();
+        final FloatBuffer gateValues = (FloatBuffer)gate.read();
 
         for (int i = 0; i < Wobble.INSTANCE.getChunkSize(); i++) {
             final boolean gateOn = gateValues.get(i) > gateThreshold;
