@@ -8,10 +8,12 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
+import java.nio.ShortBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
 import wobble.core.*;
+import wobble.core.Module;
 import wobble.module.*;
 
 public class WobbleTest {
@@ -153,7 +155,13 @@ public class WobbleTest {
         Amplifier vca = new Amplifier(filter.output());
         vca.control(env.output());
 
-        List<Float> samples = new ArrayList<>();
+        DifferentialEncoder encoder = new DifferentialEncoder(DifferentialEncoder.Format.INT16);
+        encoder.add(vca.output(), 1.0f);
+        encoder.outputDelta(false); // output PCM
+
+        Module output = encoder;
+
+        List<Short> samples = new ArrayList<>();
 
         for (int i = 0; i < 5; i++) {
             float got = 0;
@@ -164,7 +172,7 @@ public class WobbleTest {
             while (got < want) {
                 Wobble.INSTANCE.tick();
 
-                FloatBuffer block = (FloatBuffer)vca.output().read();
+                ShortBuffer block = (ShortBuffer)output.output().read();
                 block.rewind();
 
                 if (block.capacity() > want - got)
@@ -183,7 +191,7 @@ public class WobbleTest {
             while (got < want) {
                 Wobble.INSTANCE.tick();
 
-                FloatBuffer block = (FloatBuffer)vca.output().read();
+                ShortBuffer block = (ShortBuffer)output.output().read();
                 block.rewind();
 
                 if (block.capacity() > want - got)
@@ -196,11 +204,11 @@ public class WobbleTest {
             }
         }
 
-        ByteBuffer byteBuffer = ByteBuffer.allocate(samples.size() * Float.BYTES)
+        ByteBuffer byteBuffer = ByteBuffer.allocate(samples.size() * Short.BYTES)
                 .order(ByteOrder.LITTLE_ENDIAN);
 
         for (int i = 0; i < samples.size(); i++)
-            byteBuffer.putFloat(samples.get(i));
+            byteBuffer.putShort(samples.get(i));
 
         try (FileOutputStream fos = new FileOutputStream("instrument.raw")) {
             fos.write(byteBuffer.array());

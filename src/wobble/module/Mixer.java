@@ -1,5 +1,6 @@
 package wobble.module;
 
+import java.nio.Buffer;
 import java.nio.FloatBuffer;
 import java.util.LinkedList;
 import java.util.List;
@@ -76,7 +77,7 @@ public class Mixer extends Module {
     }
 
     @Override
-    public FloatBuffer read(int _id) {
+    public Buffer read(int _id) {
         return sampleBuffer.asReadOnlyBuffer();
     }
 }
