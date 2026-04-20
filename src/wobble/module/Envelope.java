@@ -23,6 +23,9 @@ public class Envelope extends Module {
     private float sustainLevel;
     private float releaseTime;
 
+    private float releaseStartLevel = 0.0f;
+    private float attackStartLevel = 0.0f;
+
     FloatBuffer sampleBuffer;
 
     public Envelope(float A, float D, float S, float R, Port gate) {
@@ -52,17 +55,26 @@ public class Envelope extends Module {
     }
 
     private float evaluateStage() {
-        final float stageProgress = (float) samplesInStage / Wobble.INSTANCE.timeToSamples(getCurrentStageTime());
-        final float phase = Math.clamp(stageProgress, 0, 1);
+    final float stageProgress = (float) samplesInStage / Wobble.INSTANCE.timeToSamples(getCurrentStageTime());
+    final float phase = Math.clamp(stageProgress, 0, 1);
 
-        switch (stage) {
-            case ATTACK: return phase;
-            case DECAY: return 1 - (1 - sustainLevel) * phase;
-            case SUSTAIN: return sustainLevel;
-            case RELEASE: return sustainLevel * (1 - phase);
-            default: throw new IllegalStateException("Invalid stage: " + stage);
-        }
+    switch (stage) {
+        case ATTACK: 
+            return attackStartLevel + (1.0f - attackStartLevel) * phase;
+            
+        case DECAY: 
+            return 1.0f - (1.0f - sustainLevel) * phase;
+            
+        case SUSTAIN: 
+            return sustainLevel;
+            
+        case RELEASE: 
+            return releaseStartLevel * (1.0f - phase);
+            
+        default: 
+            throw new IllegalStateException("Invalid stage: " + stage);
     }
+}
 
     public void setAttackTime(float attackTime) {
         this.attackTime = attackTime;
@@ -96,11 +108,13 @@ public class Envelope extends Module {
             final boolean gateOn = gateValues.get(i) > gateThreshold;
             
             if (gateOn && stage == Stage.RELEASE) {
+                attackStartLevel = evaluateStage(); 
                 stage = Stage.ATTACK;
                 samplesInStage = 0;
             }
 
             if (!gateOn && stage != Stage.RELEASE) {
+                releaseStartLevel = evaluateStage();
                 stage = Stage.RELEASE;
                 samplesInStage = 0;
             }
@@ -124,13 +138,11 @@ public class Envelope extends Module {
                     break;
                 }
                 case SUSTAIN: {
-                    // Sustain continues indefinitely until gate is released
                     break;
                 }
                 case RELEASE: {
                     stageDurationSamples = Wobble.INSTANCE.timeToSamples(releaseTime);
                     if (samplesInStage >= stageDurationSamples) {
-                        // Envelope has fully released, stay at 0
                         break;
                     }
                     break;
